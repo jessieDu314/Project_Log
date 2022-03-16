@@ -1,28 +1,21 @@
 # %%%%
 import pandas as pd
 import numpy as np
-
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
-
-
 from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import SGDClassifier
-
 from sklearn.metrics import log_loss
-
 from sklearn.model_selection import cross_validate
 from sklearn.model_selection import ShuffleSplit
+
 # %%%% read revlevant data
 SeasonResult  = pd.read_csv('1-4.MRegularSeasonCompactResults.csv')
 TourneyResult = pd.read_csv('1-5.MNCAATourneyCompactResults.csv')
-
 SeasonDetail  = pd.read_csv('MRegularSeasonDetailedResults.csv')
 TourneyDetail = pd.read_csv('MNCAATourneyDetailedResults.csv')
-
 seeds = pd.read_csv('1-3.MNCAATourneySeeds.csv')
 rank  = pd.read_csv('4-1.MMasseyOrdinals.csv')
-
 submission = pd.read_csv('1-6.MSampleSubmissionStage1.csv')
 
 # %%%% Extract average score-per-game for each team in each competing season
@@ -33,8 +26,7 @@ def score_per_game(SeasonResult):
     Result['lose'] = 0
     win   = Result[['WTeamID','WScore','NumOT','win']].copy().rename(columns = {'WTeamID':'TeamID','WScore':'Score'})
     lose  = Result[['LTeamID','LScore','NumOT','lose']].copy().rename(columns = {'LTeamID':'TeamID','LScore':'Score','lose':'win'})
-    plays = pd.concat([win,lose])
-    
+    plays = pd.concat([win,lose])   
     SPG     = pd.DataFrame()
     for t in range(len(team_id)):        
         # total number of games played by each team
@@ -54,22 +46,16 @@ SPG = score_per_game(SeasonResult)
 def play_efficiency(SeasonDetail):
     team_id      = np.sort(SeasonDetail['WTeamID'].unique())
     Result = SeasonDetail.set_index('Season').drop(columns = ['DayNum','WScore','LScore','WLoc'])
-
     win    = Result[['WTeamID', 'WFGM', 'WFGA', 'WFGM3', 'WFGA3', 'WFTM','WFTA', 
-                     'WOR', 'WDR', 'WAst', 'WTO', 'WStl', 'WBlk', 'WPF', 'NumOT']].copy()
-    
+                     'WOR', 'WDR', 'WAst', 'WTO', 'WStl', 'WBlk', 'WPF', 'NumOT']].copy()   
     lose   = Result[['LTeamID', 'LFGM','LFGA', 'LFGM3', 'LFGA3', 'LFTM', 'LFTA', 
-                     'LOR', 'LDR', 'LAst', 'LTO', 'LStl', 'LBlk', 'LPF', 'NumOT']].copy()
-    
+                     'LOR', 'LDR', 'LAst', 'LTO', 'LStl', 'LBlk', 'LPF', 'NumOT']].copy()   
     win.columns  = ['TeamID', 'FGM', 'FGA', 'FGM3', 'FGA3', 'FTM','FTA', 'OR', 'DR', 'Ast', 'TO', 'Stl', 'Blk', 'PF', 'NumOT']
-    lose.columns = ['TeamID', 'FGM', 'FGA', 'FGM3', 'FGA3', 'FTM','FTA', 'OR', 'DR', 'Ast', 'TO', 'Stl', 'Blk', 'PF', 'NumOT']
-    
-    plays = pd.concat([win,lose])
-    
+    lose.columns = ['TeamID', 'FGM', 'FGA', 'FGM3', 'FGA3', 'FTM','FTA', 'OR', 'DR', 'Ast', 'TO', 'Stl', 'Blk', 'PF', 'NumOT']  
+    plays = pd.concat([win,lose])  
     PlayEff = pd.DataFrame()
     for t in range(len(team_id)):      
         game = plays.loc[plays['TeamID'] == team_id[t]].groupby('Season').mean()
-    
         # calculate game efficiency
         off  = (game['OR']+game['Ast'])/(game['NumOT']*5+40)*40
         defe = (game['DR']+game['TO']+game['Stl']+game['Blk']-game['PF'])/(game['NumOT']*5+40)*40
@@ -102,9 +88,9 @@ def ranking(rank):
         ranking = pd.merge(pd.merge(rankMean,rankMedian,on = 'Season'),rank_up,on = 'Season').rename(columns = {'OrdinalRank_x':'RankMean','OrdinalRank_y':'RankMedian'})
         TeamRank = TeamRank.append(ranking)
         TeamRank = TeamRank.sort_values(by = ['Season','TeamID'])
-    return TeamRank
-       
+    return TeamRank       
 TeamRank = ranking(rank)
+
 
 # %%%% Construct full dataset using submission structure (testing+prediction)
 def sub_structure(submission,SeasonResult):
@@ -127,7 +113,6 @@ def sub_structure(submission,SeasonResult):
     feature = pd.merge(feature,target,how = 'left',on = 'ID') 
     feature = feature.drop(['Pred'],axis = 1)
     return feature
-
 target = sub_structure(submission,SeasonResult)
 
 
@@ -151,13 +136,11 @@ trainingSet = actualGame(SeasonResult)
 def prep_feature(SPG,PE,TeamRank,trainingSet):
     # prepare feature
     SPG_1 = SPG.iloc[SPG.index >= 2016].copy()
-
     PE_1  = PE.iloc[PE.index >= 2016].copy()
-    PE_1['TeamID'] = PE_1['TeamID'].astype('int').copy()
-    
+    PE_1['TeamID'] = PE_1['TeamID'].astype('int').copy()  
     TeamRank_1 = TeamRank.iloc[TeamRank.index >= 2016].copy()
-    TeamRank_1['TeamID'] = TeamRank_1['TeamID'].astype('int').copy()
-        
+    TeamRank_1['TeamID'] = TeamRank_1['TeamID'].astype('int').copy()        
+    
     feature = pd.merge(pd.merge(SPG_1,PE_1,how = 'left',on = ['Season','TeamID']),TeamRank_1,how = 'left',on = ['Season','TeamID'])
     feature.columns = ['TeamID', 'Score_1', 'win_1', 'GamesPlayed', 'offensive_eff_1',
                        'defensive_eff_1', 'RankMean_1', 'RankMedian_1', 'RankUp_1']
@@ -178,18 +161,16 @@ def prep_feature(SPG,PE,TeamRank,trainingSet):
     team1 = team1.drop(['Score_1', 'win_1','offensive_eff_1', 'defensive_eff_1', 'RankMean_1', 'RankMedian_1','RankUp_1',
                         'Score_2', 'win_2', 'offensive_eff_2', 'defensive_eff_2','RankMean_2', 'RankMedian_2', 'RankUp_2'],axis = 1)
     return team1
-
 trainingFeature = prep_feature(SPG,PE,TeamRank,trainingSet)
+
 
 # %%%% Merge predicting metric to testing set
 def prep_feature(SPG,PE,TeamRank,target):
     testing = target.loc[target['Result'].isna()==False]
     # prepare feature
     SPG_1 = SPG.loc[SPG.index >= 2016].copy()
-
     PE_1  = PE.loc[PE.index >= 2016].copy()
-    PE_1['TeamID'] = PE_1['TeamID'].astype('int').copy()
-    
+    PE_1['TeamID'] = PE_1['TeamID'].astype('int').copy()   
     TeamRank_1 = TeamRank.loc[TeamRank.index >= 2016].copy()
     TeamRank_1['TeamID'] = TeamRank_1['TeamID'].astype('int').copy()
         
@@ -214,6 +195,7 @@ def prep_feature(SPG,PE,TeamRank,target):
                         'Score_2', 'win_2', 'offensive_eff_2', 'defensive_eff_2','RankMean_2', 'RankMedian_2', 'RankUp_2'],axis = 1)
     return team1
 testingFeature = prep_feature(SPG,PE,TeamRank,target)
+
 
 # %%%%  Building Models
 X_train = trainingFeature[['Avg_Score_diff','Win_prob_diff', 'OffensiveE_diff', 'defensiveE_diff', 
@@ -263,13 +245,7 @@ def SGD(X_train,y_train,X_test,y_test):
     return sgd_score,sgd_pred
 sgdCls = SGD(X_train,y_train,X_test,y_test)
 
-
-
-
-
-
-            
-    
+   
 # %%%% Prediction of 2022
 sub_stage2 = pd.read_csv('MSampleSubmissionStage2.csv')
 target2 = sub_stage2.copy()
@@ -293,7 +269,3 @@ del sub_stage2['Pred']
 sub_stage2['Pred'] = sgd_pred
 sub_stage2.to_csv('StageTwo_Submission.csv')
 sub_stage2 = sub_stage2.set_index('ID')
-
-
-
-
